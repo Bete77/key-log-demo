@@ -21,11 +21,63 @@ app.prepare().then(() => {
   });
   
   const rooms = new Map();
+  let waitingPlayers = new Map();
 
   io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
 
-    // Create Room Handler
+    // Matchmaking handlers
+    socket.on('matchmaking:join', ({ playerName }) => {
+      console.log(`Player ${playerName} searching for match`);
+
+      const waitingPlayer = Array.from(waitingPlayers.entries())[0];
+      
+      if (waitingPlayer && waitingPlayer[0] !== socket.id) {
+        const roomId = generateRoomId();
+        const [waitingPlayerId, waitingPlayerName] = waitingPlayer;
+        const waitingSocket = io.sockets.sockets.get(waitingPlayerId);
+
+        if (waitingSocket) {
+          rooms.set(roomId, {
+            host: waitingPlayerId,
+            players: new Map([
+              [waitingPlayerId, {
+                name: waitingPlayerName,
+                position: { x: 0, y: 0 },
+                isHost: true
+              }],
+              [socket.id, {
+                name: playerName,
+                position: { x: 0, y: 0 },
+                isHost: false
+              }]
+            ])
+          });
+
+          waitingSocket.join(roomId);
+          socket.join(roomId);
+          waitingPlayers.delete(waitingPlayerId);
+
+          io.to(roomId).emit('match:found', { 
+            roomId,
+            players: Array.from(rooms.get(roomId).players)
+          });
+
+          console.log(`Match found: ${waitingPlayerName} vs ${playerName} in room ${roomId}`);
+        }
+      } else {
+        waitingPlayers.set(socket.id, playerName);
+        socket.emit('matchmaking:waiting');
+        console.log(`Player ${playerName} added to waiting list`);
+      }
+    });
+
+    socket.on('matchmaking:cancel', () => {
+      waitingPlayers.delete(socket.id);
+      console.log(`Player ${socket.id} cancelled matchmaking`);
+    });
+
+    // Room creation handler
     socket.on('room:create', ({ playerName }) => {
       try {
         const roomId = generateRoomId();
@@ -53,7 +105,7 @@ app.prepare().then(() => {
       }
     });
 
-    // Join Room Handler
+    // Room joining handler
     socket.on('room:join', ({ roomId, playerName }) => {
       console.log(`Player ${playerName} attempting to join room ${roomId}`);
       
@@ -85,7 +137,7 @@ app.prepare().then(() => {
       }
     });
 
-    // Cursor Movement Handler
+    // Cursor movement handler
     socket.on('cursor:move', ({ roomId, position }) => {
       const room = rooms.get(roomId);
       if (room && room.players.has(socket.id)) {
@@ -96,10 +148,12 @@ app.prepare().then(() => {
       }
     });
 
-    // Disconnect Handler
+    // Disconnect handler
     socket.on('disconnect', () => {
       console.log('Player disconnected:', socket.id);
       
+      waitingPlayers.delete(socket.id);
+
       rooms.forEach((room, roomId) => {
         if (room.players.has(socket.id)) {
           const playerName = room.players.get(socket.id).name;
@@ -133,5 +187,6 @@ app.prepare().then(() => {
 
   server.listen(3000, () => {
     console.log('Server running on http://localhost:3000');
+    console.log('WebSocket server is ready');
   });
 });
