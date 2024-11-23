@@ -57,7 +57,7 @@ export default function Home() {
       setMatchmakingStatus('Searching for players...');
       socket.emit('matchmaking:join', { playerName });
     } catch (err) {
-      setError('Failed to start matchmaking');
+      setError('Failed to start matchmaking' + err);
       setIsLoading(prev => ({ ...prev, matchmaking: false }));
       setMatchmakingStatus('');
     }
@@ -89,7 +89,7 @@ export default function Home() {
         setIsLoading(prev => ({ ...prev, create: false }));
       });
     } catch (err) {
-      setError('Failed to create room');
+      setError('Failed to create room' + err);
       setIsLoading(prev => ({ ...prev, create: false }));
     }
   };
@@ -113,7 +113,7 @@ export default function Home() {
         setIsLoading(prev => ({ ...prev, join: false }));
       });
     } catch (err) {
-      setError('Failed to join room');
+      setError('Failed to join room' + err);
       setIsLoading(prev => ({ ...prev, join: false }));
     }
   };
